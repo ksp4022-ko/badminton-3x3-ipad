@@ -304,7 +304,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '2.3.4-ipad';
+  const APP_VERSION = '2.3.5-ipad';
   const STORAGE_KEY = 'badminton3x3.ipad.pwa.v233.state';
   const ADMIN_UNLOCK_KEY = STORAGE_KEY + '.adminUnlockedDate';
   const COURTS = ['court1','court2','court3'];
@@ -320,6 +320,7 @@
   let collapsedSections = new Set(state.settings.collapsedSections || DEFAULT_COLLAPSED_SECTIONS);
   let selectedNewPlayerColor = COLORS[0];
   let floatingDrag = { active:false, moved:false, dx:0, dy:0 };
+  let lastTouchHandledAt = 0;
 
   const $ = (id) => document.getElementById(id);
 
@@ -1204,27 +1205,62 @@
     saveState();
   }
 
+  async function handleBoardInteraction(e){
+    const zoneHead = closestByClass(e.target, 'zone-head');
+    if(zoneHead && dataAttr(zoneHead, 'court')){
+      if(e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      await courtDown(dataAttr(zoneHead, 'court'));
+      return true;
+    }
+    if(zoneHead && dataAttr(zoneHead, 'next')){
+      if(e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      await nextUp(dataAttr(zoneHead, 'next'));
+      return true;
+    }
+
+    const slot = closestByClass(e.target, 'slot');
+    if(slot){
+      if(e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      const chipInSlot = closestByClass(e.target, 'player-chip');
+      if(!selectedPlayer){
+        if(chipInSlot) selectPlayer(dataAttr(chipInSlot, 'player-id'), {closePanelAfterSelect:false});
+        else showToast('請先點選球員');
+        return true;
+      }
+      const targetZone = dataAttr(slot, 'zone');
+      const targetSlot = Number(dataAttr(slot, 'slot'));
+      const moved = movePlayer(selectedPlayer.playerId, targetZone, targetSlot);
+      if(moved){
+        selectedPlayer = null;
+        showToast('已移動');
+        render();
+      }else{
+        showToast('移動失敗');
+      }
+      return true;
+    }
+
+    const chip = closestByClass(e.target, 'player-chip');
+    if(chip){
+      if(e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      const inRest = !!closestById(chip, 'restList');
+      selectPlayer(dataAttr(chip, 'player-id'), {closePanelAfterSelect:inRest});
+      return true;
+    }
+    return false;
+  }
+
   function bindEvents(){
+    document.addEventListener('touchend', async (e) => {
+      if(await handleBoardInteraction(e)) lastTouchHandledAt = Date.now();
+    }, false);
     document.addEventListener('click', async (e) => {
-      const chip = closestByClass(e.target, 'player-chip');
-      if(chip){
-        const inRest = !!closestById(chip, 'restList');
-        selectPlayer(dataAttr(chip, 'player-id'), {closePanelAfterSelect:inRest});
-        e.stopPropagation();
-        return;
-      }
-      const slot = closestByClass(e.target, 'slot');
-      if(slot){
-        if(!selectedPlayer){ showToast('請先點選球員'); return; }
-        const moved = movePlayer(selectedPlayer.playerId, dataAttr(slot, 'zone'), Number(dataAttr(slot, 'slot')));
-        if(moved){ selectedPlayer = null; showToast('已移動'); render(); }
-        else showToast('移動失敗');
-        e.stopPropagation();
-        return;
-      }
-      const zoneHead = closestByClass(e.target, 'zone-head');
-      if(zoneHead && dataAttr(zoneHead, 'court')){ await courtDown(dataAttr(zoneHead, 'court')); e.stopPropagation(); return; }
-      if(zoneHead && dataAttr(zoneHead, 'next')){ await nextUp(dataAttr(zoneHead, 'next')); e.stopPropagation(); return; }
+      if(Date.now() - lastTouchHandledAt < 500) return;
+      await handleBoardInteraction(e);
     });
 
     $('cancelSelectBtn').onclick = () => clearSelected('已取消選取');
