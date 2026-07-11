@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badminton-3x3-ipad-v2.3.4-cache-20260711';
+const CACHE_NAME = 'badminton-3x3-ipad-v2.3.4-cache-20260711-2';
 const CACHE_PREFIX = 'badminton-3x3-ipad-';
 const ASSETS = [
   './',
@@ -22,6 +22,18 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const accept = event.request.headers.get('accept') || '';
+  const isHtml = event.request.mode === 'navigate' || accept.indexOf('text/html') >= 0;
+  if (isHtml) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      }).catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
