@@ -67,7 +67,7 @@
     .slot{border:2px dashed #94a3b8;border-radius:16px;background:#f8fafc;min-height:54px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
     .slot.empty::after{content:"點此放入";color:#94a3b8;font-weight:900;font-size:clamp(14px,1.5vw,20px)}
     .zone-action{display:none;}
-    .player-chip{position:relative;width:100%;height:100%;min-height:54px;border-radius:15px;border:3px solid rgba(255,255,255,.95);box-shadow:0 4px 10px rgba(15,23,42,.18);display:flex;align-items:center;justify-content:center;padding:8px 8px 6px;overflow:hidden;color:#0f172a;user-select:none;}
+    .player-chip{position:relative;width:100%;height:100%;min-height:54px;border-radius:15px;border:3px solid rgba(255,255,255,.95);box-shadow:0 4px 10px rgba(15,23,42,.18);display:flex;align-items:center;justify-content:center;padding:8px 8px 6px;overflow:hidden;color:#0f172a;user-select:none;cursor:pointer;}
     .player-chip.selected{transform:scale(.96);border-color:#111827;box-shadow:inset 0 0 0 3px #fff,0 4px 12px rgba(15,23,42,.25);}
     .player-chip.selected::after{content:"✓";position:absolute;top:4px;right:6px;z-index:3;width:24px;height:24px;border-radius:999px;background:#111827;color:#fff;font-size:16px;font-weight:1000;line-height:24px;text-align:center;}
     .player-chip .games{position:absolute;top:4px;left:6px;z-index:1;background:rgba(255,255,255,.95);border:1px solid rgba(15,23,42,.18);border-radius:999px;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:clamp(15px,1.8vw,22px);font-weight:1000;line-height:1;padding:0 6px;}
@@ -304,8 +304,9 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '2.3.3';
+  const APP_VERSION = '2.3.4-ipad';
   const STORAGE_KEY = 'badminton3x3.ipad.pwa.v233.state';
+  const ADMIN_UNLOCK_KEY = STORAGE_KEY + '.adminUnlockedDate';
   const COURTS = ['court1','court2','court3'];
   const NEXTS = ['next1','next2','next3'];
   const SLOTS = [1,2,3,4];
@@ -324,6 +325,10 @@
 
   function nowIso(){ return new Date().toISOString(); }
   function pad(n){ return String(n).padStart(2,'0'); }
+  function todayKey(){
+    const d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
   function localStamp(){
     const d = new Date();
     return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'-'+pad(d.getHours())+pad(d.getMinutes());
@@ -332,6 +337,40 @@
   function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
   function escapeHtml(str){
     return String(str == null ? '' : str).replace(/[&<>'"]/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]; });
+  }
+  function closestByClass(el, className){
+    while(el && el !== document){
+      if(el.classList && el.classList.contains(className)) return el;
+      el = el.parentNode;
+    }
+    return null;
+  }
+  function closestById(el, id){
+    while(el && el !== document){
+      if(el.id === id) return el;
+      el = el.parentNode;
+    }
+    return null;
+  }
+  function dataAttr(el, name){
+    return el && el.getAttribute ? el.getAttribute('data-' + name) : null;
+  }
+  function isOldIosSafari(){
+    const ua = navigator.userAgent || '';
+    const match = ua.match(/OS (\d+)_/);
+    return /iPad|iPhone|iPod/.test(ua) && match && Number(match[1]) <= 12;
+  }
+  function isAdminUnlocked(){
+    try{ return localStorage.getItem(ADMIN_UNLOCK_KEY) === todayKey(); }
+    catch(err){ return false; }
+  }
+  function saveAdminUnlock(){
+    try{ localStorage.setItem(ADMIN_UNLOCK_KEY, todayKey()); }
+    catch(err){}
+  }
+  function clearAdminUnlock(){
+    try{ localStorage.removeItem(ADMIN_UNLOCK_KEY); }
+    catch(err){}
   }
 
   function defaultState(){
@@ -582,12 +621,14 @@
   }
 
   function renderCollapsedSections(){
-    document.querySelectorAll('[data-collapse-target]').forEach(btn => {
-      const body = $(btn.dataset.collapseTarget);
-      const section = btn.closest('.panel-section');
-      if(!body || !section) return;
+    const buttons = document.querySelectorAll('[data-collapse-target]');
+    for(let i = 0; i < buttons.length; i += 1){
+      const btn = buttons[i];
+      const body = $(dataAttr(btn, 'collapse-target'));
+      const section = closestByClass(btn, 'panel-section');
+      if(!body || !section) continue;
       section.classList.toggle('collapsed', collapsedSections.has(body.id));
-    });
+    }
   }
 
   function saveCollapsedSections(){
@@ -860,6 +901,8 @@
     if(!ok2) return;
     state = defaultState();
     selectedPlayer = null;
+    isAdmin = false;
+    clearAdminUnlock();
     saveState();
     showToast('已清空全部資料');
     render();
@@ -978,6 +1021,10 @@
   }
 
   function downloadText(filename, text, type){
+    if(isOldIosSafari()){
+      showExportText(filename, text);
+      return;
+    }
     const blob = new Blob([text], {type});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -985,13 +1032,61 @@
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 400);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      if(a.parentNode) a.parentNode.removeChild(a);
+    }, 400);
+  }
+
+  function showExportText(filename, text){
+    $('modalTitle').textContent = '匯出名單';
+    $('modalMessage').textContent = '舊 iPad Safari 不支援直接下載，請複製下方內容保存。檔名：' + filename;
+    $('modalExtra').innerHTML = '<textarea id="exportTextArea" style="width:100%;min-height:260px;border:1px solid #cbd5e1;border-radius:12px;padding:10px;font:14px/1.35 monospace;"></textarea>';
+    $('modalCancelBtn').style.display = '';
+    $('modalCancelBtn').textContent = '複製內容';
+    $('modalOkBtn').textContent = '關閉';
+    $('modalMask').classList.add('show');
+    const area = $('exportTextArea');
+    area.value = text;
+    setTimeout(function(){ area.focus(); area.select(); }, 0);
+    $('modalCancelBtn').onclick = function(){
+      area.focus();
+      area.select();
+      try{
+        document.execCommand('copy');
+        showToast('已複製');
+      }catch(err){
+        showToast('請手動複製');
+      }
+    };
+    $('modalOkBtn').onclick = function(){
+      $('modalMask').classList.remove('show');
+      $('modalCancelBtn').style.display = '';
+      $('modalCancelBtn').textContent = '取消';
+      $('modalOkBtn').textContent = '確認';
+      $('modalCancelBtn').onclick = null;
+      $('modalOkBtn').onclick = null;
+      $('modalExtra').innerHTML = '';
+    };
+  }
+
+  function readFileText(file){
+    return new Promise(function(resolve, reject){
+      if(typeof file.text === 'function'){
+        file.text().then(resolve).catch(reject);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(){ resolve(String(reader.result || '')); };
+      reader.onerror = function(){ reject(reader.error || new Error('read file failed')); };
+      reader.readAsText(file);
+    });
   }
 
   async function handleImportFile(file){
     if(!file) return;
     try{
-      const text = await file.text();
+      const text = await readFileText(file);
       const data = JSON.parse(text);
       const playerCount = Array.isArray(data.players) ? data.players.length : 0;
       const exportedAt = data.exportedAt || data.updatedAt || '未知';
@@ -1111,25 +1206,25 @@
 
   function bindEvents(){
     document.addEventListener('click', async (e) => {
-      const chip = e.target.closest('.player-chip');
+      const chip = closestByClass(e.target, 'player-chip');
       if(chip){
-        const inRest = !!chip.closest('#restList');
-        selectPlayer(chip.dataset.playerId, {closePanelAfterSelect:inRest});
+        const inRest = !!closestById(chip, 'restList');
+        selectPlayer(dataAttr(chip, 'player-id'), {closePanelAfterSelect:inRest});
         e.stopPropagation();
         return;
       }
-      const slot = e.target.closest('.slot');
+      const slot = closestByClass(e.target, 'slot');
       if(slot){
         if(!selectedPlayer){ showToast('請先點選球員'); return; }
-        const moved = movePlayer(selectedPlayer.playerId, slot.dataset.zone, Number(slot.dataset.slot));
+        const moved = movePlayer(selectedPlayer.playerId, dataAttr(slot, 'zone'), Number(dataAttr(slot, 'slot')));
         if(moved){ selectedPlayer = null; showToast('已移動'); render(); }
         else showToast('移動失敗');
         e.stopPropagation();
         return;
       }
-      const zoneHead = e.target.closest('.zone-head');
-      if(zoneHead && zoneHead.dataset.court){ await courtDown(zoneHead.dataset.court); e.stopPropagation(); return; }
-      if(zoneHead && zoneHead.dataset.next){ await nextUp(zoneHead.dataset.next); e.stopPropagation(); return; }
+      const zoneHead = closestByClass(e.target, 'zone-head');
+      if(zoneHead && dataAttr(zoneHead, 'court')){ await courtDown(dataAttr(zoneHead, 'court')); e.stopPropagation(); return; }
+      if(zoneHead && dataAttr(zoneHead, 'next')){ await nextUp(dataAttr(zoneHead, 'next')); e.stopPropagation(); return; }
     });
 
     $('cancelSelectBtn').onclick = () => clearSelected('已取消選取');
@@ -1145,6 +1240,7 @@
     $('adminLoginBtn').onclick = () => {
       if($('adminPasswordInput').value === state.settings.adminPassword){
         isAdmin = true;
+        saveAdminUnlock();
         $('adminPasswordInput').value='';
         collapsedSections.delete('adminSectionBody');
         saveCollapsedSections();
@@ -1177,21 +1273,23 @@
     $('importBackupBtn').onclick = () => $('importFileInput').click();
     $('importFileInput').onchange = function(e){ handleImportFile(e.target.files && e.target.files[0] ? e.target.files[0] : null); };
     $('newPlayerColorGrid').onclick = (e) => {
-      const swatch = e.target.closest('.color-swatch');
+      const swatch = closestByClass(e.target, 'color-swatch');
       if(!swatch) return;
-      selectedNewPlayerColor = swatch.dataset.color || COLORS[0];
+      selectedNewPlayerColor = dataAttr(swatch, 'color') || COLORS[0];
       renderColorPicker();
     };
-    document.querySelectorAll('[data-collapse-target]').forEach(btn => {
+    const collapseButtons = document.querySelectorAll('[data-collapse-target]');
+    for(let i = 0; i < collapseButtons.length; i += 1){
+      const btn = collapseButtons[i];
       btn.onclick = (e) => {
         e.stopPropagation();
-        const target = btn.dataset.collapseTarget;
+        const target = dataAttr(btn, 'collapse-target');
         if(collapsedSections.has(target)) collapsedSections.delete(target);
         else collapsedSections.add(target);
         saveCollapsedSections();
         renderCollapsedSections();
       };
-    });
+    }
 
     let resizeTimer = null;
     window.addEventListener('resize', () => {
@@ -1209,6 +1307,7 @@
   }
 
   function init(){
+    isAdmin = isAdminUnlocked();
     bindEvents();
     initFloatingButton();
     render();
