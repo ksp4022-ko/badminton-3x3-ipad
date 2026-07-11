@@ -25,7 +25,7 @@ const slotPos = handler.indexOf("closestByClass(e.target, 'slot')");
 const chipPos = handler.indexOf("closestByClass(e.target, 'player-chip')");
 assert('zone head handled before slot', zonePos >= 0 && slotPos > zonePos);
 assert('slot handled before chip fallback', chipPos > slotPos);
-assert('filled slot can select when no selected player', handler.includes('if(!selectedPlayer)') && handler.includes('if(chipInSlot) selectPlayer'));
+assert('filled slot can select when no selected player', handler.includes('if(!selectedPlayer)') && handler.includes('if(chipInSlot)') && handler.includes("selectPlayer(dataAttr(chipInSlot, 'player-id')"));
 assert('selected player moves through slot branch', handler.includes('movePlayer(selectedPlayer.playerId, targetZone, targetSlot)'));
 assert('court down calls courtDown from zone head', handler.includes('await courtDown(dataAttr(zoneHead, '));
 assert('next up calls nextUp from zone head', handler.includes('await nextUp(dataAttr(zoneHead, '));
@@ -38,6 +38,8 @@ assert('touch duplicate click guard exists', bind.includes('lastTouchHandledAt')
 assert('old iOS export fallback exists', html.includes('isOldIosSafari()') && html.includes('showExportText(filename, text)'));
 assert('FileReader import fallback exists', html.includes('new FileReader()') && html.includes('reader.readAsText(file)'));
 assert('admin unlock persisted', html.includes('saveAdminUnlock()') && html.includes('isAdmin = isAdminUnlocked()'));
+assert('debug mode exists', html.includes("location.search.indexOf('debug=1')") && html.includes('function debugLog'));
+assert('debug mode tracks board actions', html.includes("debugLog('zone-head courtDown'") && html.includes("debugLog('slot move success'") && html.includes("debugLog(inRest ? 'chip rest select'"));
 
 assert('service worker html network first', sw.includes('const isHtml') && sw.includes('fetch(event.request).then'));
 assert('service worker cache scoped', sw.includes("key.startsWith(CACHE_PREFIX)"));

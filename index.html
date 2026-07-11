@@ -106,6 +106,7 @@
     .mode-status{font-weight:900;color:#334155;margin:4px 0 8px;}
     .toast{position:fixed;left:50%;bottom:calc(18px + var(--safe-bottom));transform:translateX(-50%) translateY(120px);opacity:0;background:#0f172a;color:#fff;border-radius:999px;padding:12px 18px;font-weight:900;font-size:17px;z-index:80;box-shadow:var(--shadow);max-width:calc(100vw - 24px);text-align:center;transition:.25s ease;}
     .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+    .debug-panel{display:none;position:fixed;left:8px;right:8px;bottom:calc(8px + var(--safe-bottom));z-index:95;background:#111827;color:#fff;border:2px solid #facc15;border-radius:12px;padding:8px 10px;font:700 13px/1.35 monospace;white-space:pre-wrap;box-shadow:var(--shadow);}
     .modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:70;display:none;align-items:center;justify-content:center;padding:18px;}
     .modal-mask.show{display:flex;}
     .modal-card{width:min(520px,100%);background:#fff;border-radius:22px;padding:18px;box-shadow:var(--shadow);}
@@ -287,6 +288,7 @@
   </aside>
 
   <div class="toast" id="toast"></div>
+  <div class="debug-panel" id="debugPanel"></div>
 
   <div class="modal-mask" id="modalMask">
     <div class="modal-card">
@@ -304,9 +306,10 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '2.3.5-ipad';
+  const APP_VERSION = '2.3.6-ipad';
   const STORAGE_KEY = 'badminton3x3.ipad.pwa.v233.state';
   const ADMIN_UNLOCK_KEY = STORAGE_KEY + '.adminUnlockedDate';
+  const DEBUG_MODE = location.search.indexOf('debug=1') >= 0;
   const COURTS = ['court1','court2','court3'];
   const NEXTS = ['next1','next2','next3'];
   const SLOTS = [1,2,3,4];
@@ -338,6 +341,20 @@
   function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
   function escapeHtml(str){
     return String(str == null ? '' : str).replace(/[&<>'"]/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]; });
+  }
+  function debugLog(action, details){
+    if(!DEBUG_MODE) return;
+    const el = $('debugPanel');
+    if(!el) return;
+    el.style.display = 'block';
+    const p = selectedPlayer ? getPlayer(selectedPlayer.playerId) : null;
+    const selected = p ? p.name + ' @ ' + p.zone + (p.slot ? ':' + p.slot : '') : 'none';
+    el.textContent = [
+      'V ' + APP_VERSION,
+      'action: ' + action,
+      'selected: ' + selected,
+      'detail: ' + details
+    ].join('\n');
   }
   function closestByClass(el, className){
     while(el && el !== document){
@@ -1210,12 +1227,14 @@
     if(zoneHead && dataAttr(zoneHead, 'court')){
       if(e.cancelable) e.preventDefault();
       e.stopPropagation();
+      debugLog('zone-head courtDown', dataAttr(zoneHead, 'court'));
       await courtDown(dataAttr(zoneHead, 'court'));
       return true;
     }
     if(zoneHead && dataAttr(zoneHead, 'next')){
       if(e.cancelable) e.preventDefault();
       e.stopPropagation();
+      debugLog('zone-head nextUp', dataAttr(zoneHead, 'next'));
       await nextUp(dataAttr(zoneHead, 'next'));
       return true;
     }
@@ -1226,18 +1245,25 @@
       e.stopPropagation();
       const chipInSlot = closestByClass(e.target, 'player-chip');
       if(!selectedPlayer){
-        if(chipInSlot) selectPlayer(dataAttr(chipInSlot, 'player-id'), {closePanelAfterSelect:false});
-        else showToast('請先點選球員');
+        if(chipInSlot){
+          debugLog('slot select chip', dataAttr(chipInSlot, 'player-id') + ' -> ' + dataAttr(slot, 'zone') + ':' + dataAttr(slot, 'slot'));
+          selectPlayer(dataAttr(chipInSlot, 'player-id'), {closePanelAfterSelect:false});
+        }else{
+          debugLog('slot empty no selected', dataAttr(slot, 'zone') + ':' + dataAttr(slot, 'slot'));
+          showToast('請先點選球員');
+        }
         return true;
       }
       const targetZone = dataAttr(slot, 'zone');
       const targetSlot = Number(dataAttr(slot, 'slot'));
       const moved = movePlayer(selectedPlayer.playerId, targetZone, targetSlot);
       if(moved){
+        debugLog('slot move success', selectedPlayer.playerId + ' -> ' + targetZone + ':' + targetSlot);
         selectedPlayer = null;
         showToast('已移動');
         render();
       }else{
+        debugLog('slot move fail', selectedPlayer.playerId + ' -> ' + targetZone + ':' + targetSlot);
         showToast('移動失敗');
       }
       return true;
@@ -1248,6 +1274,7 @@
       if(e.cancelable) e.preventDefault();
       e.stopPropagation();
       const inRest = !!closestById(chip, 'restList');
+      debugLog(inRest ? 'chip rest select' : 'chip board select', dataAttr(chip, 'player-id'));
       selectPlayer(dataAttr(chip, 'player-id'), {closePanelAfterSelect:inRest});
       return true;
     }
