@@ -1,6 +1,6 @@
 {
-  "name": "羽球排場 2x2 / 3x3",
-  "short_name": "羽球排場",
+  "name": "羽球排場 iPad",
+  "short_name": "排場 iPad",
   "description": "單機 PWA 羽球 2x2 / 3x3 排場系統",
   "start_url": "./",
   "scope": "./",
