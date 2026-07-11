@@ -1,4 +1,5 @@
 const CACHE_NAME = 'badminton-3x3-ipad-v2.3.3-cache-20260711';
+const CACHE_PREFIX = 'badminton-3x3-ipad-';
 const ASSETS = [
   './',
   './index.html',
@@ -14,7 +15,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key))))
   );
   self.clients.claim();
 });
